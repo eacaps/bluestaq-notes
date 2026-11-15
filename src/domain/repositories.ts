@@ -8,6 +8,8 @@ export interface Page<T> {
 export interface NoteQuery {
   q?: string;
   teamId?: string;
+  /** The caller. Only notes this user can read are listed and counted. */
+  viewerId: string;
   limit: number;
   offset: number;
 }
@@ -25,8 +27,6 @@ export interface TeamRepository {
   findById(id: string): Team | undefined;
   /** Teams the user belongs to, oldest first. */
   listForMember(userId: string, limit: number, offset: number): Page<Team>;
-  /** Returns the subset of the given ids that exist. */
-  findExistingIds(ids: string[]): string[];
 }
 
 export interface NoteRepository {

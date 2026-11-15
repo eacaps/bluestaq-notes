@@ -57,10 +57,10 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   seedDefaultUser(users);
 
   // Business layer
-  const access = new AccessService();
+  const access = new AccessService(memberships);
   const authService = new AuthService(users);
   const teamService = new TeamService(teams, memberships, users, runInTransaction);
-  const noteService = new NoteService(notes, teams, access, runInTransaction);
+  const noteService = new NoteService(notes, memberships, access, runInTransaction);
 
   // Presentation layer
   await app.register(jwt, {
@@ -104,7 +104,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
         title: 'Notes Service API',
         version: '0.1.0',
         description:
-          'Notes shared by small teams. Stage 2a: bearer-token authentication without passwords (login needs only an email), and no access rules yet.',
+          'Notes shared by small teams. Bearer-token authentication without passwords (login needs only an email). Stage 2b: team-based access. A note is private to its owner unless labeled with teams; the owner and every member of those teams can read and edit it. Callers who cannot see a note or team get 404.',
       },
       components: {
         securitySchemes: {

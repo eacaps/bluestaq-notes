@@ -26,7 +26,7 @@ export const NoteCreate = Type.Object(
   {
     title: Type.String({ pattern: '\\S', description: TITLE_DESC }),
     body: Type.String({ maxLength: 100_000 }),
-    team_ids: Type.Optional(teamIds('Teams to label the note with. Every id must exist.')),
+    team_ids: Type.Optional(teamIds('Teams to label the note with. Every id must be a team you belong to.')),
   },
   { $id: 'NoteCreate', additionalProperties: false },
 );
@@ -35,7 +35,7 @@ export const NoteUpdate = Type.Object(
   {
     title: Type.Optional(Type.String({ pattern: '\\S', description: TITLE_DESC })),
     body: Type.Optional(Type.String({ maxLength: 100_000 })),
-    team_ids: Type.Optional(teamIds('Replaces the note\'s teams. Every id must exist.')),
+    team_ids: Type.Optional(teamIds('Replaces the note\'s teams. Every id must be a team you belong to.')),
   },
   { $id: 'NoteUpdate', additionalProperties: false, minProperties: 1 },
 );
