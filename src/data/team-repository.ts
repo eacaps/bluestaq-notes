@@ -16,7 +16,7 @@ export class SqliteTeamRepository implements TeamRepository {
   private readonly listStmt;
   private readonly countStmt;
 
-  constructor(private readonly db: Db) {
+  constructor(db: Db) {
     this.insertStmt = db.prepare(
       'INSERT INTO teams (id, name) VALUES (@id, @name)',
     );
@@ -48,12 +48,4 @@ export class SqliteTeamRepository implements TeamRepository {
     return { items: rows.map(toTeam), total };
   }
 
-  findExistingIds(ids: string[]): string[] {
-    if (ids.length === 0) return [];
-    const placeholders = ids.map(() => '?').join(',');
-    const rows = this.db
-      .prepare(`SELECT id FROM teams WHERE id IN (${placeholders})`)
-      .all(...ids) as { id: string }[];
-    return rows.map((r) => r.id);
-  }
 }

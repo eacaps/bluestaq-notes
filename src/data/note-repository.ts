@@ -57,8 +57,16 @@ export class SqliteNoteRepository implements NoteRepository {
   }
 
   list(query: NoteQuery): Page<Note> {
-    const where: string[] = [];
-    const params: unknown[] = [];
+    // Visibility rule. Keep equivalent to AccessService.canRead
+    // (src/services/access-service.ts): the owner, or a member of any team on the note.
+    // It is part of the clause shared by the COUNT and the page query, so `total` is exact.
+    const where: string[] = [
+      `(notes.owner_id = ?
+        OR EXISTS (SELECT 1 FROM note_teams vnt
+                   JOIN team_members vtm ON vtm.team_id = vnt.team_id
+                   WHERE vnt.note_id = notes.id AND vtm.user_id = ?))`,
+    ];
+    const params: unknown[] = [query.viewerId, query.viewerId];
     if (query.q) {
       where.push(`(title LIKE ? ESCAPE '\\' OR body LIKE ? ESCAPE '\\')`);
       const pattern = `%${escapeLike(query.q)}%`;

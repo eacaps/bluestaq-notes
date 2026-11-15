@@ -29,7 +29,7 @@ export const noteRoutes: FastifyPluginAsync<NoteRoutesOptions> = async (instance
         tags,
         summary: 'Create a note',
         description:
-          'Creates a note owned by the current user. Every id in `team_ids` must be an existing team, otherwise the request fails with 400.',
+          'Creates a note owned by the current user. Every id in `team_ids` must be a team the caller belongs to; unknown ids and teams the caller is not in both fail with the same 400. Without `team_ids` the note is private to its owner.',
         body: NoteCreate,
         response: {
           201: Note,
@@ -57,7 +57,7 @@ export const noteRoutes: FastifyPluginAsync<NoteRoutesOptions> = async (instance
         tags,
         summary: 'List notes',
         description:
-          'Returns notes, newest first, as a paginated envelope. `q` matches title and body case-insensitively. `team` keeps only notes labeled with that team.',
+          'Returns only the notes the caller can read (own notes, or notes labeled with a team the caller belongs to), newest first, as a paginated envelope; `total` counts only those notes. `q` matches title and body case-insensitively. `team` keeps only notes labeled with that team, within the readable ones: filtering by a team you are not in gives an empty page.',
         querystring: NoteListQuery,
         response: {
           200: NoteList,
@@ -80,7 +80,8 @@ export const noteRoutes: FastifyPluginAsync<NoteRoutesOptions> = async (instance
       schema: {
         tags,
         summary: 'Get a note',
-        description: 'Fetches one note by id.',
+        description:
+          'Fetches one note by id. Responds 404 when the note does not exist or the caller cannot read it.',
         params: IdParams,
         response: {
           200: Note,
@@ -102,7 +103,7 @@ export const noteRoutes: FastifyPluginAsync<NoteRoutesOptions> = async (instance
         tags,
         summary: 'Update a note',
         description:
-          'Partially updates a note. Send at least one of `title`, `body`, `team_ids`. `team_ids` replaces the whole list and every id must exist.',
+          'Partially updates a note. Send at least one of `title`, `body`, `team_ids`. `team_ids` replaces the whole list, and the caller must belong to every team in the new list (400 otherwise), so a team the caller is not in is dropped from the list. Omit `team_ids` to leave the teams unchanged. Anyone who can read the note can edit it; 404 when the note does not exist or the caller cannot read it.',
         params: IdParams,
         body: NoteUpdate,
         response: {

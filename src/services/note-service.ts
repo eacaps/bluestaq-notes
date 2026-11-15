@@ -3,9 +3,9 @@ import type { Note, User } from '../domain/entities.js';
 import { ForbiddenError, NotFoundError, ValidationError } from '../domain/errors.js';
 import type {
   NoteRepository,
+  MembershipRepository,
   Page,
   RunInTransaction,
-  TeamRepository,
 } from '../domain/repositories.js';
 import type { AccessService } from './access-service.js';
 import { normalizeLabel } from './label.js';
@@ -32,7 +32,7 @@ export interface ListNotesInput {
 export class NoteService {
   constructor(
     private readonly notes: NoteRepository,
-    private readonly teams: TeamRepository,
+    private readonly memberships: MembershipRepository,
     private readonly access: AccessService,
     private readonly runInTransaction: RunInTransaction,
   ) {}
@@ -40,7 +40,7 @@ export class NoteService {
   create(user: User, input: CreateNoteInput): Note {
     const title = normalizeLabel('title', input.title, 200);
     return this.runInTransaction(() => {
-      const teamIds = this.validTeamIds(input.teamIds);
+      const teamIds = this.validTeamIds(user, input.teamIds);
       return this.notes.insert({
         id: randomUUID(),
         ownerId: user.id,
@@ -52,16 +52,12 @@ export class NoteService {
   }
 
   get(user: User, id: string): Note {
-    const note = this.find(id);
-    if (!this.access.canRead(user, note)) throw new ForbiddenError('Not allowed to read this note');
-    return note;
+    return this.findReadable(user, id);
   }
 
   list(user: User, input: ListNotesInput): Page<Note> {
-    // Stage 2b moves visibility filtering into the repository query so that
-    // `total` stays correct. Until then every note is readable.
-    void user;
-    return this.notes.list(input);
+    // Visibility is applied in the repository query so that `total` stays correct.
+    return this.notes.list({ ...input, viewerId: user.id });
   }
 
   update(user: User, id: string, input: UpdateNoteInput): Note {
@@ -70,7 +66,7 @@ export class NoteService {
     const title =
       input.title === undefined ? undefined : normalizeLabel('title', input.title, 200);
     return this.runInTransaction(() => {
-      const existing = this.find(id);
+      const existing = this.findReadable(user, id);
       if (!this.access.canWrite(user, existing)) {
         throw new ForbiddenError('Not allowed to edit this note');
       }
@@ -79,7 +75,7 @@ export class NoteService {
         ownerId: existing.ownerId,
         title: title ?? existing.title,
         body: input.body ?? existing.body,
-        teamIds: input.teamIds ? this.validTeamIds(input.teamIds) : existing.teamIds,
+        teamIds: input.teamIds ? this.validTeamIds(user, input.teamIds) : existing.teamIds,
       });
     });
   }
@@ -90,12 +86,23 @@ export class NoteService {
     return note;
   }
 
-  private validTeamIds(ids: string[]): string[] {
+  /** An unreadable note looks exactly like a missing one. */
+  private findReadable(user: User, id: string): Note {
+    const note = this.find(id);
+    if (!this.access.canRead(user, note)) throw new NotFoundError(`Note ${id} not found`);
+    return note;
+  }
+
+  /**
+   * Every id must be a team the caller belongs to. Unknown and non-member ids
+   * fail identically (a missing team has no members), with a fixed message that
+   * does not echo ids.
+   */
+  private validTeamIds(user: User, ids: string[]): string[] {
     const unique = [...new Set(ids)];
-    const existing = new Set(this.teams.findExistingIds(unique));
-    const unknown = unique.filter((id) => !existing.has(id));
-    if (unknown.length > 0) {
-      throw new ValidationError(`Unknown team_ids: ${unknown.join(', ')}`);
+    const member = new Set(this.memberships.findMemberTeamIds(user.id, unique));
+    if (unique.some((id) => !member.has(id))) {
+      throw new ValidationError('team_ids must be existing teams that you belong to');
     }
     return unique;
   }
