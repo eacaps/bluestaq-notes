@@ -10,7 +10,7 @@ Backend for a note-taking service used and shared by several small teams.
 
 **Stage 2 (later): multi-user.** Built in two parts. Stage 1 is built so this is a small change (see "Seams for stage 2").
 
-- **2a, tokens without passwords.** `POST /auth/register` (`email`, `name`) creates a user and returns a JWT. `POST /auth/login` (`email` only) returns a JWT. `GET /users/me`. `getCurrentUser` reads the bearer token and returns 401 for a missing or invalid one. Notes record the real owner. Access rules stay open, so any logged-in user can still read and edit any note. Login proves nothing at this point, which is intended and is fixed in stage 5.
+- **2a, tokens without passwords (built).** `POST /auth/register` (`email`, `name`) creates a user and returns a JWT. `POST /auth/login` (`email` only) returns a JWT. `GET /users/me`. `getCurrentUser` reads the bearer token and returns 401 for a missing or invalid one. Notes record the real owner. Access rules stay open, so any logged-in user can still read and edit any note. Login proves nothing at this point, which is intended and is fixed in stage 5.
 - **2b, team access.** Team membership endpoints, `POST /teams` makes the creator the first member, the real `canRead` and `canWrite`, `GET /notes` filtered to what the caller can see, and `team_ids` validation against membership.
 
 **Stage 3 (later): revisions.** Every edit to a note keeps a snapshot of its previous state, so history can be listed and restored. Built after stage 2 so each revision records a real editor (`edited_by`). See "Revisions (stage 3)".
@@ -122,10 +122,11 @@ src/
   server.ts         listen
   domain/           entities, repository interfaces, domain errors
   data/             SQLite connection, schema.sql, seed, repositories
-  services/         notes, teams, access, (later) auth, revisions
+  services/         notes, teams, access, auth, (later) revisions
   presentation/
-    routes/         notes.ts, teams.ts (one FastifyPluginAsync each)
-    schemas/        TypeBox schemas: note, team, error, pagination
+    routes/         auth.ts, notes.ts, teams.ts (one FastifyPluginAsync each)
+    schemas/        TypeBox schemas: note, team, user, error, pagination
+    current-user.ts authentication hook and getCurrentUser
     error-handler.ts
 ```
 
@@ -181,7 +182,7 @@ Each integration test builds a fresh app with its own `:memory:` database throug
 
 ## Seams for stage 2
 
-1. **Current user.** Routes get the user from `getCurrentUser(request)`. Stage 1 returns the seeded default user. Stage 2a changes this one function to read the bearer token and reject missing or invalid ones with 401. The JWT uses `JWT_SECRET` (a dev default with a logged warning) and has an expiry.
+1. **Current user.** Stage 1 resolved every request to the seeded default user through `getCurrentUser(request)`. Stage 2a turned this into a shared `onRequest` hook (`registerAuthentication` in `src/presentation/current-user.ts`), registered on the root instance before any route. It verifies the bearer token, loads the user through `AuthService.findById`, and stores it on `request.currentUser`. Handlers call `getCurrentUser(request)` to read it. Every route requires a token except an explicit allow-list, so a route added later is protected by default.
 2. **Access control.** Services call `canRead(user, note)` and `canWrite(user, note)` from the access service. Routes never check access themselves. Stages 1 and 2a allow everything. Stage 2b implements the rule below. Delete stays owner-only.
 3. **Schema.** `team_members` already exists.
 
@@ -235,4 +236,12 @@ Goal: replace the hand-written SQL, prepared statements and row types with Prism
 
 - Stage 1b testing: Vitest, with `test/unit/` and `test/integration/` folders that each mirror `src/`. Both per-route and scenario integration tests are included. A coverage report with no enforced threshold, and one GitHub Actions job running typecheck, build, unit and integration tests on pull requests.
 - Data persists across restarts. SQLite is file-backed by default (path set by a `DB_PATH` environment variable, with a default such as `./data/notes.db`). `DB_PATH=:memory:` switches to an in-memory database, which tests use.
+- Stage 2a auth:
+  - Tokens are JWTs from `@fastify/jwt`, signed and verified with HS256 only. The `sub` claim is the user id. Signing and verification live in the presentation layer and `app.ts`; services never import a JWT library.
+  - `JWT_SECRET` signs tokens. With `NODE_ENV=production` and no secret, startup fails with an error. Otherwise a development default is used and a warning is logged once. `JWT_EXPIRES_IN` sets the lifetime and defaults to `1h`.
+  - Public routes: `POST /auth/register`, `POST /auth/login`, and everything under `/docs` (Swagger UI and the spec JSON). The allow-list matches the method and route pattern, not the raw URL. Unmatched routes are not public, so an unknown path without a token returns 401 instead of 404.
+  - A missing, malformed, expired or badly signed token, or a token for a deleted user, returns 401 `{ error: "Unauthorized", message }` with `WWW-Authenticate: Bearer`. Authentication runs before body validation, so an invalid body without a token is also 401.
+  - An unknown email on login returns 401 with the generic message "Invalid credentials". A duplicate email on register returns 409 `{ error: "Conflict", message }`. The `UNIQUE` index on `users.email` is the final guard, so a race between two registrations also ends in 409.
+  - Emails are trimmed and lower-cased before they are stored or looked up, and limited to 254 characters. Names follow the `normalizeLabel` rule (trimmed, not blank, at most 100 characters).
+  - `POST /teams` passes the caller to `TeamService.create`, which ignores it until 2b.
 - Stage 4 team deletion cascades: `DELETE /teams/{id}` removes the team from every note's `team_ids`. A note left with no teams becomes private to its owner. Blocking with 409 was rejected because, with no admin role, a blocked team could become undeletable.
