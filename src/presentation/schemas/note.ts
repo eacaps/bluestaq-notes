@@ -1,6 +1,5 @@
 import { Type, type Static } from 'typebox';
 import { PaginationQuery, listEnvelope } from './common.js';
-import { ref } from './ref.js';
 
 export const MAX_TEAM_IDS = 50;
 
@@ -41,7 +40,7 @@ export const NoteUpdate = Type.Object(
   { $id: 'NoteUpdate', additionalProperties: false, minProperties: 1 },
 );
 
-export const NoteList = listEnvelope('NoteList', ref(Note));
+export const NoteList = listEnvelope('NoteList', Note);
 
 export const NoteListQuery = Type.Evaluate(
   Type.Intersect([

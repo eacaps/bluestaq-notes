@@ -10,7 +10,6 @@ import { defaultUserResolver } from './presentation/current-user.js';
 import { registerErrorHandler } from './presentation/error-handler.js';
 import { noteRoutes } from './presentation/routes/notes.js';
 import { teamRoutes } from './presentation/routes/teams.js';
-import { registerSchemas } from './presentation/schemas/index.js';
 import { AccessService } from './services/access-service.js';
 import { NoteService } from './services/note-service.js';
 import { TeamService } from './services/team-service.js';
@@ -60,7 +59,6 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     },
   });
   await app.register(swaggerUi, { routePrefix: '/docs' });
-  registerSchemas(app);
   registerErrorHandler(app);
   const getCurrentUser = defaultUserResolver(defaultUser);
   await app.register(noteRoutes, { notes: noteService, getCurrentUser });

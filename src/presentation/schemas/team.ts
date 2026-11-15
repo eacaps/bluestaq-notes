@@ -1,6 +1,5 @@
 import { Type, type Static } from 'typebox';
 import { listEnvelope } from './common.js';
-import { ref } from './ref.js';
 
 export const Team = Type.Object(
   {
@@ -23,4 +22,4 @@ export const TeamCreate = Type.Object(
   { $id: 'TeamCreate', additionalProperties: false },
 );
 
-export const TeamList = listEnvelope('TeamList', ref(Team));
+export const TeamList = listEnvelope('TeamList', Team);

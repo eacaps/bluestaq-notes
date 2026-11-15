@@ -5,7 +5,6 @@ import type { TeamService } from '../../services/team-service.js';
 import { toTeamDto } from '../mappers.js';
 import { IdParams, PaginationQuery } from '../schemas/common.js';
 import { ErrorResponse, serverErrorResponses } from '../schemas/error.js';
-import { ref } from '../schemas/ref.js';
 import { Team, TeamCreate, TeamList } from '../schemas/team.js';
 
 export interface TeamRoutesOptions {
@@ -27,8 +26,8 @@ export const teamRoutes: FastifyPluginAsync<TeamRoutesOptions> = async (instance
         tags,
         summary: 'Create a team',
         description: 'Creates a team that notes can be labeled with.',
-        body: ref(TeamCreate),
-        response: { 201: ref(Team), 400: ref(ErrorResponse), ...serverErrorResponses() },
+        body: TeamCreate,
+        response: { 201: Team, 400: ErrorResponse, ...serverErrorResponses() },
       },
     },
     async (request, reply) => {
@@ -45,7 +44,7 @@ export const teamRoutes: FastifyPluginAsync<TeamRoutesOptions> = async (instance
         summary: 'List teams',
         description: 'Returns teams, oldest first, as a paginated envelope.',
         querystring: PaginationQuery,
-        response: { 200: ref(TeamList), 400: ref(ErrorResponse), ...serverErrorResponses() },
+        response: { 200: TeamList, 400: ErrorResponse, ...serverErrorResponses() },
       },
     },
     async (request) => {
@@ -64,9 +63,9 @@ export const teamRoutes: FastifyPluginAsync<TeamRoutesOptions> = async (instance
         description: 'Fetches one team by id.',
         params: IdParams,
         response: {
-          200: ref(Team),
-          400: ref(ErrorResponse),
-          404: ref(ErrorResponse),
+          200: Team,
+          400: ErrorResponse,
+          404: ErrorResponse,
           ...serverErrorResponses(),
         },
       },

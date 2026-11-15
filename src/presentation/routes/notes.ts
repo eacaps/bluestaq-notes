@@ -5,7 +5,6 @@ import { requireUser, type GetCurrentUser } from '../current-user.js';
 import { toNoteDto } from '../mappers.js';
 import { IdParams } from '../schemas/common.js';
 import { ErrorResponse, forbiddenResponses, serverErrorResponses } from '../schemas/error.js';
-import { ref } from '../schemas/ref.js';
 import { Note, NoteCreate, NoteList, NoteListQuery, NoteUpdate } from '../schemas/note.js';
 
 export interface NoteRoutesOptions {
@@ -28,8 +27,8 @@ export const noteRoutes: FastifyPluginAsync<NoteRoutesOptions> = async (instance
         summary: 'Create a note',
         description:
           'Creates a note owned by the current user. Every id in `team_ids` must be an existing team, otherwise the request fails with 400.',
-        body: ref(NoteCreate),
-        response: { 201: ref(Note), 400: ref(ErrorResponse), ...serverErrorResponses() },
+        body: NoteCreate,
+        response: { 201: Note, 400: ErrorResponse, ...serverErrorResponses() },
       },
     },
     async (request, reply) => {
@@ -52,7 +51,7 @@ export const noteRoutes: FastifyPluginAsync<NoteRoutesOptions> = async (instance
         description:
           'Returns notes, newest first, as a paginated envelope. `q` matches title and body case-insensitively. `team` keeps only notes labeled with that team.',
         querystring: NoteListQuery,
-        response: { 200: ref(NoteList), 400: ref(ErrorResponse), ...serverErrorResponses() },
+        response: { 200: NoteList, 400: ErrorResponse, ...serverErrorResponses() },
       },
     },
     async (request) => {
@@ -71,9 +70,9 @@ export const noteRoutes: FastifyPluginAsync<NoteRoutesOptions> = async (instance
         description: 'Fetches one note by id.',
         params: IdParams,
         response: {
-          200: ref(Note),
-          400: ref(ErrorResponse),
-          404: ref(ErrorResponse),
+          200: Note,
+          400: ErrorResponse,
+          404: ErrorResponse,
           ...forbiddenResponses(),
           ...serverErrorResponses(),
         },
@@ -91,11 +90,11 @@ export const noteRoutes: FastifyPluginAsync<NoteRoutesOptions> = async (instance
         description:
           'Partially updates a note. Send at least one of `title`, `body`, `team_ids`. `team_ids` replaces the whole list and every id must exist.',
         params: IdParams,
-        body: ref(NoteUpdate),
+        body: NoteUpdate,
         response: {
-          200: ref(Note),
-          400: ref(ErrorResponse),
-          404: ref(ErrorResponse),
+          200: Note,
+          400: ErrorResponse,
+          404: ErrorResponse,
           ...forbiddenResponses(),
           ...serverErrorResponses(),
         },

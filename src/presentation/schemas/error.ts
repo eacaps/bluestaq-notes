@@ -1,5 +1,4 @@
 import { Type, type Static } from 'typebox';
-import { ref } from './ref.js';
 
 export const ErrorResponse = Type.Object(
   {
@@ -9,9 +8,9 @@ export const ErrorResponse = Type.Object(
   { $id: 'ErrorResponse', description: 'Standard error body' },
 );
 /** Any route can fail unexpectedly; spread into every route's `response` map. */
-export const serverErrorResponses = () => ({ 500: ref(ErrorResponse) });
+export const serverErrorResponses = () => ({ 500: ErrorResponse });
 
 /** Routes that consult AccessService; spread alongside `serverErrorResponses`. */
-export const forbiddenResponses = () => ({ 403: ref(ErrorResponse) });
+export const forbiddenResponses = () => ({ 403: ErrorResponse });
 
 export type ErrorResponseDto = Static<typeof ErrorResponse>;
