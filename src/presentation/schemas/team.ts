@@ -23,3 +23,8 @@ export const TeamCreate = Type.Object(
 );
 
 export const TeamList = listEnvelope('TeamList', Team);
+
+export const TeamMemberParams = Type.Object({
+  id: Type.String({ format: 'uuid', description: 'Team id (UUID)' }),
+  userId: Type.String({ format: 'uuid', description: 'User id (UUID)' }),
+});

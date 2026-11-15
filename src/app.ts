@@ -3,6 +3,7 @@ import jwt from '@fastify/jwt';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import { createTransactionRunner, openDatabase } from './data/connection.js';
+import { SqliteMembershipRepository } from './data/membership-repository.js';
 import { SqliteNoteRepository } from './data/note-repository.js';
 import { seedDefaultUser } from './data/seed.js';
 import { SqliteTeamRepository } from './data/team-repository.js';
@@ -51,13 +52,15 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   const users = new SqliteUserRepository(db);
   const teams = new SqliteTeamRepository(db);
   const notes = new SqliteNoteRepository(db);
+  const memberships = new SqliteMembershipRepository(db);
+  const runInTransaction = createTransactionRunner(db);
   seedDefaultUser(users);
 
   // Business layer
   const access = new AccessService();
   const authService = new AuthService(users);
-  const teamService = new TeamService(teams);
-  const noteService = new NoteService(notes, teams, access, createTransactionRunner(db));
+  const teamService = new TeamService(teams, memberships, users, runInTransaction);
+  const noteService = new NoteService(notes, teams, access, runInTransaction);
 
   // Presentation layer
   await app.register(jwt, {
@@ -112,7 +115,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       tags: [
         { name: 'Auth', description: 'Register, log in and read the current user' },
         { name: 'Notes', description: 'Create, list, read and update notes' },
-        { name: 'Teams', description: 'Create, list and read teams' },
+        { name: 'Teams', description: 'Create teams, manage members, list and read the teams you belong to' },
       ],
     },
   });
