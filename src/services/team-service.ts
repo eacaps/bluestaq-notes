@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Team } from '../domain/entities.js';
+import type { Team, User } from '../domain/entities.js';
 import { NotFoundError } from '../domain/errors.js';
 import type { Page, TeamRepository } from '../domain/repositories.js';
 import { normalizeLabel } from './label.js';
@@ -7,7 +7,8 @@ import { normalizeLabel } from './label.js';
 export class TeamService {
   constructor(private readonly teams: TeamRepository) {}
 
-  create(input: { name: string }): Team {
+  /** `_user` is the caller. Stage 2b makes them the team's first member. */
+  create(_user: User, input: { name: string }): Team {
     return this.teams.insert({ id: randomUUID(), name: normalizeLabel('name', input.name, 100) });
   }
 

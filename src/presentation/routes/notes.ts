@@ -1,10 +1,15 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import type { NoteService } from '../../services/note-service.js';
-import { requireUser, type GetCurrentUser } from '../current-user.js';
+import type { GetCurrentUser } from '../current-user.js';
 import { toNoteDto } from '../mappers.js';
 import { IdParams } from '../schemas/common.js';
-import { ErrorResponse, forbiddenResponses, serverErrorResponses } from '../schemas/error.js';
+import {
+  ErrorResponse,
+  forbiddenResponses,
+  serverErrorResponses,
+  unauthorizedResponses,
+} from '../schemas/error.js';
 import { Note, NoteCreate, NoteList, NoteListQuery, NoteUpdate } from '../schemas/note.js';
 
 export interface NoteRoutesOptions {
@@ -17,8 +22,6 @@ const tags = ['Notes'];
 export const noteRoutes: FastifyPluginAsync<NoteRoutesOptions> = async (instance, opts) => {
   const app = instance.withTypeProvider<TypeBoxTypeProvider>();
   const { notes, getCurrentUser } = opts;
-  requireUser(app, getCurrentUser);
-
   app.post(
     '/notes',
     {
@@ -28,7 +31,12 @@ export const noteRoutes: FastifyPluginAsync<NoteRoutesOptions> = async (instance
         description:
           'Creates a note owned by the current user. Every id in `team_ids` must be an existing team, otherwise the request fails with 400.',
         body: NoteCreate,
-        response: { 201: Note, 400: ErrorResponse, ...serverErrorResponses() },
+        response: {
+          201: Note,
+          400: ErrorResponse,
+          ...unauthorizedResponses(),
+          ...serverErrorResponses(),
+        },
       },
     },
     async (request, reply) => {
@@ -51,7 +59,12 @@ export const noteRoutes: FastifyPluginAsync<NoteRoutesOptions> = async (instance
         description:
           'Returns notes, newest first, as a paginated envelope. `q` matches title and body case-insensitively. `team` keeps only notes labeled with that team.',
         querystring: NoteListQuery,
-        response: { 200: NoteList, 400: ErrorResponse, ...serverErrorResponses() },
+        response: {
+          200: NoteList,
+          400: ErrorResponse,
+          ...unauthorizedResponses(),
+          ...serverErrorResponses(),
+        },
       },
     },
     async (request) => {
@@ -74,6 +87,7 @@ export const noteRoutes: FastifyPluginAsync<NoteRoutesOptions> = async (instance
           400: ErrorResponse,
           404: ErrorResponse,
           ...forbiddenResponses(),
+          ...unauthorizedResponses(),
           ...serverErrorResponses(),
         },
       },
@@ -96,6 +110,7 @@ export const noteRoutes: FastifyPluginAsync<NoteRoutesOptions> = async (instance
           400: ErrorResponse,
           404: ErrorResponse,
           ...forbiddenResponses(),
+          ...unauthorizedResponses(),
           ...serverErrorResponses(),
         },
       },

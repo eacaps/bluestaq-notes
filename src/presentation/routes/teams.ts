@@ -1,10 +1,10 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
-import { requireUser, type GetCurrentUser } from '../current-user.js';
+import type { GetCurrentUser } from '../current-user.js';
 import type { TeamService } from '../../services/team-service.js';
 import { toTeamDto } from '../mappers.js';
 import { IdParams, PaginationQuery } from '../schemas/common.js';
-import { ErrorResponse, serverErrorResponses } from '../schemas/error.js';
+import { ErrorResponse, serverErrorResponses, unauthorizedResponses } from '../schemas/error.js';
 import { Team, TeamCreate, TeamList } from '../schemas/team.js';
 
 export interface TeamRoutesOptions {
@@ -17,8 +17,6 @@ const tags = ['Teams'];
 export const teamRoutes: FastifyPluginAsync<TeamRoutesOptions> = async (instance, opts) => {
   const app = instance.withTypeProvider<TypeBoxTypeProvider>();
   const { teams, getCurrentUser } = opts;
-  requireUser(app, getCurrentUser);
-
   app.post(
     '/teams',
     {
@@ -27,11 +25,16 @@ export const teamRoutes: FastifyPluginAsync<TeamRoutesOptions> = async (instance
         summary: 'Create a team',
         description: 'Creates a team that notes can be labeled with.',
         body: TeamCreate,
-        response: { 201: Team, 400: ErrorResponse, ...serverErrorResponses() },
+        response: {
+          201: Team,
+          400: ErrorResponse,
+          ...unauthorizedResponses(),
+          ...serverErrorResponses(),
+        },
       },
     },
     async (request, reply) => {
-      const team = teams.create({ name: request.body.name });
+      const team = teams.create(getCurrentUser(request), { name: request.body.name });
       return reply.code(201).send(toTeamDto(team));
     },
   );
@@ -44,7 +47,12 @@ export const teamRoutes: FastifyPluginAsync<TeamRoutesOptions> = async (instance
         summary: 'List teams',
         description: 'Returns teams, oldest first, as a paginated envelope.',
         querystring: PaginationQuery,
-        response: { 200: TeamList, 400: ErrorResponse, ...serverErrorResponses() },
+        response: {
+          200: TeamList,
+          400: ErrorResponse,
+          ...unauthorizedResponses(),
+          ...serverErrorResponses(),
+        },
       },
     },
     async (request) => {
@@ -66,6 +74,7 @@ export const teamRoutes: FastifyPluginAsync<TeamRoutesOptions> = async (instance
           200: Team,
           400: ErrorResponse,
           404: ErrorResponse,
+          ...unauthorizedResponses(),
           ...serverErrorResponses(),
         },
       },

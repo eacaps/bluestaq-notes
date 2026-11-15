@@ -10,6 +10,9 @@ export const ErrorResponse = Type.Object(
 /** Any route can fail unexpectedly; spread into every route's `response` map. */
 export const serverErrorResponses = () => ({ 500: ErrorResponse });
 
+/** Every protected route; spread into its `response` map. */
+export const unauthorizedResponses = () => ({ 401: ErrorResponse });
+
 /** Routes that consult AccessService; spread alongside `serverErrorResponses`. */
 export const forbiddenResponses = () => ({ 403: ErrorResponse });
 
