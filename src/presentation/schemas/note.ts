@@ -2,8 +2,10 @@ import { Type, type Static } from 'typebox';
 import { PaginationQuery, listEnvelope } from './common.js';
 import { ref } from './ref.js';
 
+export const MAX_TEAM_IDS = 50;
+
 const teamIds = (description: string) =>
-  Type.Array(Type.String({ format: 'uuid' }), { description });
+  Type.Array(Type.String({ format: 'uuid' }), { maxItems: MAX_TEAM_IDS, description });
 
 export const Note = Type.Object(
   {
@@ -19,25 +21,25 @@ export const Note = Type.Object(
 );
 export type NoteDto = Static<typeof Note>;
 
+const TITLE_DESC =
+  'Trimmed of surrounding whitespace before storing. Must not be blank, at most 200 characters after trimming.';
 export const NoteCreate = Type.Object(
   {
-    title: Type.String({ minLength: 1, maxLength: 200 }),
+    title: Type.String({ pattern: '\\S', description: TITLE_DESC }),
     body: Type.String({ maxLength: 100_000 }),
     team_ids: Type.Optional(teamIds('Teams to label the note with. Every id must exist.')),
   },
   { $id: 'NoteCreate', additionalProperties: false },
 );
-export type NoteCreateDto = Static<typeof NoteCreate>;
 
 export const NoteUpdate = Type.Object(
   {
-    title: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+    title: Type.Optional(Type.String({ pattern: '\\S', description: TITLE_DESC })),
     body: Type.Optional(Type.String({ maxLength: 100_000 })),
     team_ids: Type.Optional(teamIds('Replaces the note\'s teams. Every id must exist.')),
   },
   { $id: 'NoteUpdate', additionalProperties: false, minProperties: 1 },
 );
-export type NoteUpdateDto = Static<typeof NoteUpdate>;
 
 export const NoteList = listEnvelope('NoteList', ref(Note));
 
@@ -52,4 +54,3 @@ export const NoteListQuery = Type.Evaluate(
     PaginationQuery,
   ]),
 );
-export type NoteListQueryDto = Static<typeof NoteListQuery>;

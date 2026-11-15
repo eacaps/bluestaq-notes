@@ -4,8 +4,13 @@
   "private": true,
   "description": "Notes service shared by small teams",
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "tsx watch src/server.ts",
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "prebuild": "npm run clean",
     "build": "tsc -p tsconfig.json && node scripts/copy-schema.mjs",
     "start": "node dist/server.js",
     "typecheck": "tsc -p tsconfig.json --noEmit"
@@ -14,7 +19,6 @@
     "@fastify/swagger": "^9.9.4",
     "@fastify/swagger-ui": "^6.1.4",
     "@fastify/type-provider-typebox": "^6.3.0",
-    "ajv-formats": "^3.0.1",
     "better-sqlite3": "^13.2.0",
     "fastify": "^5.12.8",
     "typebox": "^1.4.7"

@@ -8,6 +8,7 @@ import type {
   TeamRepository,
 } from '../domain/repositories.js';
 import type { AccessService } from './access-service.js';
+import { normalizeLabel } from './label.js';
 
 export interface CreateNoteInput {
   title: string;
@@ -37,16 +38,17 @@ export class NoteService {
   ) {}
 
   create(user: User, input: CreateNoteInput): Note {
-    const teamIds = this.validTeamIds(input.teamIds);
-    return this.runInTransaction(() =>
-      this.notes.insert({
+    const title = normalizeLabel('title', input.title, 200);
+    return this.runInTransaction(() => {
+      const teamIds = this.validTeamIds(input.teamIds);
+      return this.notes.insert({
         id: randomUUID(),
         ownerId: user.id,
-        title: input.title,
+        title,
         body: input.body,
         teamIds,
-      }),
-    );
+      });
+    });
   }
 
   get(user: User, id: string): Note {
@@ -63,18 +65,23 @@ export class NoteService {
   }
 
   update(user: User, id: string, input: UpdateNoteInput): Note {
-    const existing = this.find(id);
-    if (!this.access.canWrite(user, existing)) {
-      throw new ForbiddenError('Not allowed to edit this note');
-    }
-    const changes = {
-      id: existing.id,
-      ownerId: existing.ownerId,
-      title: input.title ?? existing.title,
-      body: input.body ?? existing.body,
-      teamIds: input.teamIds ? this.validTeamIds(input.teamIds) : existing.teamIds,
-    };
-    return this.runInTransaction(() => this.notes.update(changes));
+    // Pure input normalization stays outside; everything that reads stored
+    // state (the note, access check, team existence) runs in the transaction.
+    const title =
+      input.title === undefined ? undefined : normalizeLabel('title', input.title, 200);
+    return this.runInTransaction(() => {
+      const existing = this.find(id);
+      if (!this.access.canWrite(user, existing)) {
+        throw new ForbiddenError('Not allowed to edit this note');
+      }
+      return this.notes.update({
+        id: existing.id,
+        ownerId: existing.ownerId,
+        title: title ?? existing.title,
+        body: input.body ?? existing.body,
+        teamIds: input.teamIds ? this.validTeamIds(input.teamIds) : existing.teamIds,
+      });
+    });
   }
 
   private find(id: string): Note {

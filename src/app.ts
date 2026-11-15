@@ -62,11 +62,9 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   await app.register(swaggerUi, { routePrefix: '/docs' });
   registerSchemas(app);
   registerErrorHandler(app);
-  await app.register(noteRoutes, {
-    notes: noteService,
-    getCurrentUser: defaultUserResolver(defaultUser),
-  });
-  await app.register(teamRoutes, { teams: teamService });
+  const getCurrentUser = defaultUserResolver(defaultUser);
+  await app.register(noteRoutes, { notes: noteService, getCurrentUser });
+  await app.register(teamRoutes, { teams: teamService, getCurrentUser });
 
   return app;
 }
