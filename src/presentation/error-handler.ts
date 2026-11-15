@@ -1,8 +1,10 @@
 import { STATUS_CODES } from 'node:http';
 import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
+  ConflictError,
   ForbiddenError,
   NotFoundError,
+  UnauthorizedError,
   ValidationError,
 } from '../domain/errors.js';
 import type { ErrorResponseDto } from './schemas/error.js';
@@ -15,6 +17,11 @@ export function registerErrorHandler(app: FastifyInstance): void {
   app.setErrorHandler((err: FastifyError, request: FastifyRequest, reply: FastifyReply) => {
     if (err instanceof NotFoundError) return send(reply, 404, 'Not Found', err.message);
     if (err instanceof ValidationError) return send(reply, 400, 'Bad Request', err.message);
+    if (err instanceof UnauthorizedError) {
+      reply.header('WWW-Authenticate', 'Bearer');
+      return send(reply, 401, 'Unauthorized', err.message);
+    }
+    if (err instanceof ConflictError) return send(reply, 409, 'Conflict', err.message);
     if (err instanceof ForbiddenError) return send(reply, 403, 'Forbidden', err.message);
     if (err.validation) return send(reply, 400, 'Bad Request', err.message);
     if (err.statusCode && err.statusCode < 500) {

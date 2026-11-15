@@ -1,4 +1,5 @@
 import type { NewUser, User } from '../domain/entities.js';
+import { ConflictError } from '../domain/errors.js';
 import type { UserRepository } from '../domain/repositories.js';
 import type { Db } from './connection.js';
 
@@ -30,7 +31,15 @@ export class SqliteUserRepository implements UserRepository {
   }
 
   insert(user: NewUser): User {
-    this.insertStmt.run(user);
+    try {
+      this.insertStmt.run(user);
+    } catch (err) {
+      // Covers the check-then-insert race: the UNIQUE index on users.email is the final guard.
+      if ((err as { code?: string }).code === 'SQLITE_CONSTRAINT_UNIQUE') {
+        throw new ConflictError('A user with this email already exists');
+      }
+      throw err;
+    }
     const stored = this.findById(user.id);
     if (!stored) throw new Error(`User ${user.id} missing after insert`);
     return stored;
