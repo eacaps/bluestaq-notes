@@ -19,6 +19,8 @@ Backend for a note-taking service used and shared by several small teams.
 
 **Stage 5 (later): passwords.** `register` takes a `password` (minimum 8 characters). It is hashed with `scrypt` from Node's `crypto`, using a 16-byte random salt per user, and stored as `scrypt$<salt hex>$<hash hex>` in `users.password_hash`. `login` recomputes the hash and compares with `crypto.timingSafeEqual`. An unknown email and a wrong password both return the same 401. The hash never appears in a response. The seeded user's password comes from an environment variable. Optional: `@fastify/rate-limit` on `/auth/login`. No other route changes, because they already depend only on the token.
 
+**Stage 6 (later): Prisma.** Replace the hand-written SQL in `src/data/` with Prisma as the database layer. Behavior and the API do not change. See "Prisma (stage 6)".
+
 ## Stack
 
 - Node + TypeScript
@@ -85,6 +87,7 @@ The API exposes a note's teams as a plain list, `team_ids: string[]`. The join t
 - `POST` returns 201 with the created resource.
 - List responses: `{ "items": [...], "total": number, "limit": number, "offset": number }`.
 - Unknown `team_ids` on create or update return 400.
+- Note `title` and team `name` are trimmed (`String.prototype.trim`) on create and update, and the trimmed value is stored and returned. A value that is empty after trimming returns 400. Length limits (title 200, name 100) apply to the trimmed value. Team names are not unique, so there is no uniqueness comparison.
 
 ## Architecture: N-layer
 
@@ -191,6 +194,29 @@ Sharing is team-based only. There are no per-user shares and no roles.
 - When setting `team_ids`, the user must belong to each team.
 
 Team rules in 2b: anyone logged in can create a team and becomes its first member. Any member can add any existing user (`PUT /teams/{id}/members/{userId}`) or remove any member (`DELETE`), including themselves. Self-join is not allowed, since it would let anyone read any team's notes. Equal members can remove each other, which is a known limit of having no roles.
+
+## Prisma (stage 6)
+
+Goal: replace the hand-written SQL, prepared statements and row types with Prisma Client, without changing the API, the services or the domain entities. Done last so the schema has stopped moving and the test suite from stage 1b protects the swap.
+
+**What changes**
+- `prisma/schema.prisma` replaces `src/data/schema.sql` and `scripts/copy-schema.mjs`. Prisma Migrate replaces the `CREATE TABLE IF NOT EXISTS` run at startup. The initial migration must reproduce the existing tables, indexes and `ON DELETE CASCADE` constraints, and existing `data/notes.db` files are baselined with `prisma migrate resolve` instead of being recreated.
+- Use `@map` and `@@map` so the Prisma models use camelCase fields (`ownerId`, `createdAt`) over the existing snake_case columns.
+- The SQLite repositories in `src/data/` are rewritten over Prisma Client: `LIKE` search becomes `contains` filters, the team filter becomes a relation filter, pagination becomes `skip` and `take`, and the batched `note_teams` lookup becomes `include` of the relation (still mapped to `teamIds`).
+- Timestamps stay ISO 8601 UTC strings in the domain. Prisma returns `Date`, so the repositories convert in one place.
+
+**What does not change**
+- `src/domain/` entities and repository interfaces. Prisma's generated types stay inside `src/data/`, so nothing above the data layer imports `@prisma/client`.
+- Services, routes, schemas, mappers and the error handler, apart from the async changes below.
+
+**Consequences to plan for**
+- Prisma is async only. Every repository and service method returns a `Promise`, routes `await` them, and `RunInTransaction` becomes `<T>(fn: () => Promise<T>) => Promise<T>`, implemented with `prisma.$transaction(async (tx) => ...)`. This is the largest part of the change. It is the same signature change a move to Postgres would need.
+- Inside an interactive transaction, repositories must use the `tx` client. Pass it through an `AsyncLocalStorage` context or give repositories a per-transaction instance.
+- The team check in `create` and `update` and the read-modify-write in `update` must stay inside the transaction callback.
+- SQLite transactions in Prisma do not offer `BEGIN IMMEDIATE`. Writes are serialized, which is enough for one process.
+- Tests that pass fakes to services keep working. Integration tests use a temporary SQLite file or `:memory:` through Prisma's SQLite URL, and run migrations before each suite.
+
+**Done when:** the full stage 1b suite passes unchanged apart from the async signatures, `npm run build` and `typecheck` pass, `better-sqlite3` and `schema.sql` are removed, and an existing `data/notes.db` opens without data loss.
 
 ## Decisions and non-goals
 

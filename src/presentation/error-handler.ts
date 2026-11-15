@@ -1,3 +1,4 @@
+import { STATUS_CODES } from 'node:http';
 import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
   ForbiddenError,
@@ -17,7 +18,7 @@ export function registerErrorHandler(app: FastifyInstance): void {
     if (err instanceof ForbiddenError) return send(reply, 403, 'Forbidden', err.message);
     if (err.validation) return send(reply, 400, 'Bad Request', err.message);
     if (err.statusCode && err.statusCode < 500) {
-      return send(reply, err.statusCode, err.name, err.message);
+      return send(reply, err.statusCode, STATUS_CODES[err.statusCode] ?? 'Bad Request', err.message);
     }
     request.log.error(err);
     return send(reply, 500, 'Internal Server Error', 'Unexpected error');

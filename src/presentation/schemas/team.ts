@@ -13,9 +13,14 @@ export const Team = Type.Object(
 export type TeamDto = Static<typeof Team>;
 
 export const TeamCreate = Type.Object(
-  { name: Type.String({ minLength: 1, maxLength: 100 }) },
+  {
+    name: Type.String({
+      pattern: '\\S',
+      description:
+        'Trimmed of surrounding whitespace before storing. Must not be blank, at most 100 characters after trimming.',
+    }),
+  },
   { $id: 'TeamCreate', additionalProperties: false },
 );
-export type TeamCreateDto = Static<typeof TeamCreate>;
 
 export const TeamList = listEnvelope('TeamList', ref(Team));

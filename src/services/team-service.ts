@@ -2,12 +2,13 @@ import { randomUUID } from 'node:crypto';
 import type { Team } from '../domain/entities.js';
 import { NotFoundError } from '../domain/errors.js';
 import type { Page, TeamRepository } from '../domain/repositories.js';
+import { normalizeLabel } from './label.js';
 
 export class TeamService {
   constructor(private readonly teams: TeamRepository) {}
 
   create(input: { name: string }): Team {
-    return this.teams.insert({ id: randomUUID(), name: input.name });
+    return this.teams.insert({ id: randomUUID(), name: normalizeLabel('name', input.name, 100) });
   }
 
   get(id: string): Team {

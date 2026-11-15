@@ -21,7 +21,6 @@ export class SqliteNoteRepository implements NoteRepository {
   private readonly byIdStmt;
   private readonly linkStmt;
   private readonly unlinkStmt;
-  private readonly teamIdsStmt;
 
   constructor(private readonly db: Db) {
     this.insertStmt = db.prepare(
@@ -36,9 +35,6 @@ export class SqliteNoteRepository implements NoteRepository {
     this.byIdStmt = db.prepare(`SELECT ${COLUMNS} FROM notes WHERE id = ?`);
     this.linkStmt = db.prepare('INSERT INTO note_teams (note_id, team_id) VALUES (?, ?)');
     this.unlinkStmt = db.prepare('DELETE FROM note_teams WHERE note_id = ?');
-    this.teamIdsStmt = db.prepare(
-      'SELECT team_id FROM note_teams WHERE note_id = ? ORDER BY rowid',
-    );
   }
 
   insert(note: NewNote): Note {
@@ -57,7 +53,7 @@ export class SqliteNoteRepository implements NoteRepository {
 
   findById(id: string): Note | undefined {
     const row = this.byIdStmt.get(id) as NoteRow | undefined;
-    return row && this.toNote(row);
+    return row && this.toNote(row, this.teamIdsFor([id]).get(id) ?? []);
   }
 
   list(query: NoteQuery): Page<Note> {
@@ -79,7 +75,8 @@ export class SqliteNoteRepository implements NoteRepository {
     const rows = this.db
       .prepare(`SELECT ${COLUMNS} FROM notes ${clause} ORDER BY created_at DESC, id LIMIT ? OFFSET ?`)
       .all(...params, query.limit, query.offset) as NoteRow[];
-    return { items: rows.map((row) => this.toNote(row)), total };
+    const teamIdsByNote = this.teamIdsFor(rows.map((row) => row.id));
+    return { items: rows.map((row) => this.toNote(row, teamIdsByNote.get(row.id) ?? [])), total };
   }
 
   private reread(id: string): Note {
@@ -88,8 +85,25 @@ export class SqliteNoteRepository implements NoteRepository {
     return note;
   }
 
-  private toNote(row: NoteRow): Note {
-    const teamIds = (this.teamIdsStmt.all(row.id) as { team_id: string }[]).map((r) => r.team_id);
+  /** One query for a whole page: note id -> team ids in link order. At most `limit` (100) ids are bound. */
+  private teamIdsFor(noteIds: string[]): Map<string, string[]> {
+    const byNote = new Map<string, string[]>();
+    if (noteIds.length === 0) return byNote;
+    const placeholders = noteIds.map(() => '?').join(', ');
+    const links = this.db
+      .prepare(
+        `SELECT note_id, team_id FROM note_teams WHERE note_id IN (${placeholders}) ORDER BY rowid`,
+      )
+      .all(...noteIds) as { note_id: string; team_id: string }[];
+    for (const { note_id, team_id } of links) {
+      const ids = byNote.get(note_id);
+      if (ids) ids.push(team_id);
+      else byNote.set(note_id, [team_id]);
+    }
+    return byNote;
+  }
+
+  private toNote(row: NoteRow, teamIds: string[]): Note {
     return {
       id: row.id,
       ownerId: row.owner_id,
