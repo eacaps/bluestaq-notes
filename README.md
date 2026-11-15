@@ -36,7 +36,7 @@ Swagger UI (public) is at <http://localhost:3000/docs>. The OpenAPI 3 JSON is at
 
 ## Authentication
 
-Register (or log in as the seeded `default@example.com`), then send the token as a bearer token:
+Register (or log in as the seeded `eacaps@gmail.com`), then send the token as a bearer token:
 
 ```
 # Register: returns 201 {token, user}
