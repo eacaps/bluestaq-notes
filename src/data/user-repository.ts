@@ -3,14 +3,14 @@ import { ConflictError } from '../domain/errors.js';
 import type { UserRepository } from '../domain/repositories.js';
 import type { Db } from './connection.js';
 
-interface UserRow {
+export interface UserRow {
   id: string;
   email: string;
   name: string;
   created_at: string;
 }
 
-const toUser = (row: UserRow): User => ({
+export const toUser = (row: UserRow): User => ({
   id: row.id,
   email: row.email,
   name: row.name,

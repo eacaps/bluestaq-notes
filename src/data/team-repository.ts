@@ -22,9 +22,12 @@ export class SqliteTeamRepository implements TeamRepository {
     );
     this.byIdStmt = db.prepare('SELECT id, name, created_at FROM teams WHERE id = ?');
     this.listStmt = db.prepare(
-      'SELECT id, name, created_at FROM teams ORDER BY created_at, id LIMIT ? OFFSET ?',
+      `SELECT t.id, t.name, t.created_at FROM teams t
+       JOIN team_members m ON m.team_id = t.id
+       WHERE m.user_id = ?
+       ORDER BY t.created_at, t.id LIMIT ? OFFSET ?`,
     );
-    this.countStmt = db.prepare('SELECT COUNT(*) AS total FROM teams');
+    this.countStmt = db.prepare('SELECT COUNT(*) AS total FROM team_members WHERE user_id = ?');
   }
 
   insert(team: NewTeam): Team {
@@ -39,9 +42,9 @@ export class SqliteTeamRepository implements TeamRepository {
     return row && toTeam(row);
   }
 
-  list(limit: number, offset: number): Page<Team> {
-    const rows = this.listStmt.all(limit, offset) as TeamRow[];
-    const { total } = this.countStmt.get() as { total: number };
+  listForMember(userId: string, limit: number, offset: number): Page<Team> {
+    const rows = this.listStmt.all(userId, limit, offset) as TeamRow[];
+    const { total } = this.countStmt.get(userId) as { total: number };
     return { items: rows.map(toTeam), total };
   }
 

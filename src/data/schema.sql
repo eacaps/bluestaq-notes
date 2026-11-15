@@ -35,3 +35,4 @@ CREATE TABLE IF NOT EXISTS note_teams (
 
 CREATE INDEX IF NOT EXISTS idx_notes_created_at ON notes(created_at);
 CREATE INDEX IF NOT EXISTS idx_note_teams_team_id ON note_teams(team_id);
+CREATE INDEX IF NOT EXISTS idx_team_members_user_id ON team_members(user_id);

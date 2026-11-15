@@ -1,4 +1,5 @@
 import { Type, type Static } from 'typebox';
+import { listEnvelope } from './common.js';
 
 export const User = Type.Object(
   {
@@ -47,3 +48,5 @@ export const AuthResponse = Type.Object(
 );
 
 export type AuthResponseDto = Static<typeof AuthResponse>;
+
+export const UserList = listEnvelope('UserList', User);
