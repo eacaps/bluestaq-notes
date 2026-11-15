@@ -10,8 +10,8 @@ Backend for a note-taking service used and shared by several small teams.
 
 **Stage 2 (later): multi-user.** Built in two parts. Stage 1 is built so this is a small change (see "Seams for stage 2").
 
-- **2a, tokens without passwords (built).** `POST /auth/register` (`email`, `name`) creates a user and returns a JWT. `POST /auth/login` (`email` only) returns a JWT. `GET /users/me`. `getCurrentUser` reads the bearer token and returns 401 for a missing or invalid one. Notes record the real owner. Access rules stay open, so any logged-in user can still read and edit any note. Login proves nothing at this point, which is intended and is fixed in stage 5.
-- **2b, team access.** Team membership endpoints, `POST /teams` makes the creator the first member, the real `canRead` and `canWrite`, `GET /notes` filtered to what the caller can see, and `team_ids` validation against membership.
+- **2a, tokens without passwords (built).** `POST /auth/register` (`email`, `name`) creates a user and returns a JWT. `POST /auth/login` (`email` only) returns a JWT. `GET /users/me`. `getCurrentUser` reads the bearer token and returns 401 for a missing or invalid one. Notes record the real owner. Access rules stayed open in 2a (closed by 2b). Login proves nothing at this point, which is intended and is fixed in stage 5.
+- **2b, team access (built).** Team membership endpoints, `POST /teams` makes the creator the first member, the real `canRead` and `canWrite`, `GET /notes` filtered to what the caller can see, and `team_ids` validation against membership. One endpoint beyond the list below: `GET /teams/{id}/members`, because members could not otherwise be seen. There is no backfill and no migration (see "Stage 2b decisions").
 
 **Stage 3 (later): revisions.** Every edit to a note keeps a snapshot of its previous state, so history can be listed and restored. Built after stage 2 so each revision records a real editor (`edited_by`). See "Revisions (stage 3)".
 
@@ -78,15 +78,23 @@ The API exposes a note's teams as a plain list, `team_ids: string[]`. The join t
 | Method | Path | Description |
 |---|---|---|
 | POST | `/teams` | Create. Body: `name` |
-| GET | `/teams` | List |
-| GET | `/teams/{id}` | Fetch one |
+| GET | `/teams` | List the teams the caller belongs to (stage 2b) |
+| GET | `/teams/{id}` | Fetch one. Members only: 404 for non-members (stage 2b) |
 
+### Team membership (stage 2b)
+| Method | Path | Description |
+|---|---|---|
+| PUT | `/teams/{id}/members/{userId}` | Any member adds an existing user. Idempotent, 204. Unknown user: 404 |
+| DELETE | `/teams/{id}/members/{userId}` | Any member removes any member, including themselves. 204, also when the user was not a member |
+| GET | `/teams/{id}/members` | Addition beyond the original endpoint list. Members only. Paginated `User` list (`id`, `email`, `name`, `created_at`) |
+
+Every membership route returns 404 for the team when the caller is not a member, so a team's existence is never revealed and nobody can join by themselves.
 ### Conventions
 - JSON in and out. IDs are UUIDs.
 - Errors use one shape: `{ "error": string, "message": string }`, with 400 (validation), 404 (not found).
 - `POST` returns 201 with the created resource.
 - List responses: `{ "items": [...], "total": number, "limit": number, "offset": number }`.
-- Unknown `team_ids` on create or update return 400.
+- Unknown `team_ids`, and `team_ids` of teams the caller does not belong to, return 400 on create or update. Both cases use the same fixed message (`team_ids must be existing teams that you belong to`), so it does not reveal which ids exist.
 - Note `title` and team `name` are trimmed (`String.prototype.trim`) on create and update, and the trimmed value is stored and returned. A value that is empty after trimming returns 400. Length limits (title 200, name 100) apply to the trimmed value. Team names are not unique, so there is no uniqueness comparison.
 
 ## Architecture: N-layer
@@ -132,7 +140,7 @@ src/
 
 Routes follow the pattern used in the reference example: `instance.withTypeProvider<TypeBoxTypeProvider>()`, per-status response schemas, and types derived with `Static<typeof schema>`. The difference is that handlers receive their service through the plugin's options, not from a decorated `app` property, and they map domain errors to responses in the shared error handler instead of checking for `undefined`.
 
-Later stages fit the same layers: stage 2a adds `auth` and the token check (presentation) with a user lookup (data). Stage 2b changes the access service only. Stage 3 adds a `RevisionRepository` and a revision service, and the note service calls it inside the edit transaction. Stage 5 changes the auth service and the `users` repository.
+Later stages fit the same layers: stage 2a adds `auth` and the token check (presentation) with a user lookup (data). Stage 2b changes the access service, adds a membership repository (defined in `src/domain/`, injected into the access, team and note services) and makes the note list query visibility-aware. Stage 3 adds a `RevisionRepository` and a revision service, and the note service calls it inside the edit transaction. Stage 5 changes the auth service and the `users` repository.
 
 ## Revisions (stage 3)
 
@@ -183,7 +191,7 @@ Each integration test builds a fresh app with its own `:memory:` database throug
 ## Seams for stage 2
 
 1. **Current user.** Stage 1 resolved every request to the seeded default user through `getCurrentUser(request)`. Stage 2a turned this into a shared `onRequest` hook (`registerAuthentication` in `src/presentation/current-user.ts`), registered on the root instance before any route. It verifies the bearer token, loads the user through `AuthService.findById`, and stores it on `request.currentUser`. Handlers call `getCurrentUser(request)` to read it. Every route requires a token except an explicit allow-list, so a route added later is protected by default.
-2. **Access control.** Services call `canRead(user, note)` and `canWrite(user, note)` from the access service. Routes never check access themselves. Stages 1 and 2a allow everything. Stage 2b implements the rule below. Delete stays owner-only.
+2. **Access control.** Services call `canRead(user, note)` and `canWrite(user, note)` from the access service. Routes never check access themselves. Stages 1 and 2a allowed everything. Stage 2b (built) implements the rule below, with a membership repository injected into `AccessService`. `canDelete` (owner only) exists but is unused until stage 4.
 3. **Schema.** `team_members` already exists.
 
 ### Stage 2b access rule
@@ -195,6 +203,16 @@ Sharing is team-based only. There are no per-user shares and no roles.
 - When setting `team_ids`, the user must belong to each team.
 
 Team rules in 2b: anyone logged in can create a team and becomes its first member. Any member can add any existing user (`PUT /teams/{id}/members/{userId}`) or remove any member (`DELETE`), including themselves. Self-join is not allowed, since it would let anyone read any team's notes. Equal members can remove each other, which is a known limit of having no roles.
+
+### Stage 2b decisions
+- **404, not 403.** A team the caller is not in, and a note the caller cannot read, both return 404 with the same message as a missing one. Readers can edit, so the 403 path in `NoteService.update` is not reachable today.
+- **`team_ids` validation.** The caller must belong to every listed team, on create and on PATCH. Unknown ids and non-member teams both return 400 with the same fixed message. The cap of 50 ids stays.
+- **PATCH `team_ids` replaces the list.** The caller must belong to every team in the new list. A non-member cannot add a team, and re-sending a team they are not in also fails with 400, so such a team can only be dropped, never kept. Omit `team_ids` to leave the teams unchanged. `team_ids: []` makes the note private to its owner.
+- **`GET /notes`.** Only notes the caller can read, with an exact `total`. Visibility is applied in SQL, before paging. The `team` filter intersects with visibility: filtering by a team the caller is not in returns an empty page, not an error.
+- **Two copies of the visibility rule.** `AccessService` (per note) and `SqliteNoteRepository.list` (SQL) must say the same thing. Each has a comment pointing at the other. Change both together.
+- **Last member.** Removing the last member leaves a team nobody can see or rejoin. This is accepted: there are no roles and no admin, and stage 4 adds team deletion, which also needs a member.
+- **Equal members.** Any member can add or remove any member, themselves included.
+- **No backfill, no migration.** Teams and notes created before 2b can have no members, so they would be invisible. A database file from before 2b must be deleted (`rm data/notes.db`). The only schema change is an extra index, `idx_team_members_user_id`.
 
 ## Prisma (stage 6)
 
