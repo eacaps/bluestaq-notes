@@ -8,5 +8,5 @@ export const DEFAULT_USER_EMAIL = 'eacaps@gmail.com';
 export function seedDefaultUser(users: UserRepository): User {
   const existing = users.findByEmail(DEFAULT_USER_EMAIL);
   if (existing) return existing;
-  return users.insert({ id: randomUUID(), email: DEFAULT_USER_EMAIL, name: 'Default User' });
+  return users.insert({ id: randomUUID(), email: DEFAULT_USER_EMAIL, name: 'eacaps' });
 }
