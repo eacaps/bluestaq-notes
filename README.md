@@ -15,7 +15,18 @@ npm install
 npm run dev
 ```
 
-Other scripts: `npm run typecheck`, `npm run build`, `npm start` (runs the built `dist/`).
+Other scripts: `npm run typecheck` (source and tests), `npm run build`, `npm start` (runs the built `dist/`).
+
+## Tests
+
+| Command | What it runs |
+|---|---|
+| `npm test` | All tests (unit and integration) |
+| `npm run test:unit` | `test/unit/`: services with in-memory fake repositories |
+| `npm run test:integration` | `test/integration/`: SQLite, routes, scenarios, OpenAPI, persistence |
+| `npm run coverage` | All tests with a coverage report in `coverage/` (no minimum enforced) |
+
+Both folders mirror `src/`. Integration tests build a fresh app on its own `:memory:` database through `buildTestApp()` in `test/helpers/`, so they do not read `DB_PATH` and can run in parallel. CI (`.github/workflows/ci.yml`) runs typecheck, build, unit and integration tests on pull requests.
 
 ## Environment variables
 
