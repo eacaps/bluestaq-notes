@@ -5,7 +5,7 @@ import swaggerUi from '@fastify/swagger-ui';
 import { createTransactionRunner, openDatabase } from './data/connection.js';
 import { SqliteMembershipRepository } from './data/membership-repository.js';
 import { SqliteNoteRepository } from './data/note-repository.js';
-import { seedDefaultUser } from './data/seed.js';
+import { DEFAULT_USER_EMAIL, seedDefaultUser } from './data/seed.js';
 import { SqliteTeamRepository } from './data/team-repository.js';
 import { SqliteUserRepository } from './data/user-repository.js';
 import { getCurrentUser, registerAuthentication } from './presentation/current-user.js';
@@ -103,12 +103,32 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       info: {
         title: 'Notes Service API',
         version: '0.1.0',
-        description:
-          'Notes shared by small teams. Bearer-token authentication without passwords (login needs only an email). Stage 2b: team-based access. A note is private to its owner unless labeled with teams; the owner and every member of those teams can read and edit it. Callers who cannot see a note or team get 404.',
+        description: [
+          'Notes shared by small teams. A note is private to its owner unless labeled with teams; the owner and every member of those teams can read and edit it. Callers who cannot see a note or team get 404.',
+          '',
+          '## Getting started: logging in from this page',
+          '',
+          'Every endpoint except `/auth/register` and `/auth/login` needs a bearer token.',
+          '',
+          `1. Open **Auth > POST /auth/login**, click *Try it out*, send \`{ "email": "${DEFAULT_USER_EMAIL}" }\` (the seeded user), or create your own user first with **POST /auth/register** (\`email\` and \`name\`).`,
+          '2. Copy the `token` value from the response.',
+          '3. Click the **Authorize** button at the top of this page, paste the token into the *Value* field (without the word `Bearer`), and click *Authorize*, then *Close*.',
+          '4. Every request you send from this page now carries the token. **GET /users/me** confirms who you are.',
+          '',
+          'Tokens expire (one hour by default). When a request returns 401, log in again and re-authorize.',
+          '',
+          '**There are no passwords yet.** Login needs only an email, so anyone who knows an email can act as that user. Passwords are planned for a later stage.',
+        ].join('\n'),
       },
       components: {
         securitySchemes: {
-          bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+          bearerAuth: {
+            type: 'http',
+            scheme: 'bearer',
+            bearerFormat: 'JWT',
+            description:
+              'Paste the `token` returned by `POST /auth/login` or `POST /auth/register`. Do not add the `Bearer` prefix; this page adds it.',
+          },
         },
       },
       security: [{ bearerAuth: [] }],
