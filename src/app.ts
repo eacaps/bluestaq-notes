@@ -12,6 +12,7 @@ import { registerErrorHandler } from './presentation/error-handler.js';
 import { authRoutes } from './presentation/routes/auth.js';
 import { noteRoutes } from './presentation/routes/notes.js';
 import { teamRoutes } from './presentation/routes/teams.js';
+import { AuthRequest, AuthResponse, RegisterRequest, User } from './presentation/schemas/user.js';
 import { AccessService } from './services/access-service.js';
 import { AuthService } from './services/auth-service.js';
 import { NoteService } from './services/note-service.js';
@@ -25,6 +26,18 @@ export interface AppOptions {
   jwtExpiresIn: string | number;
   logger?: FastifyServerOptions['logger'];
 }
+
+/**
+ * Top-level request and response schemas are inlined by @fastify/swagger (only nested
+ * ones with an $id are hoisted). The auth models are documented once under
+ * components/schemas and referenced, without registering them with Fastify.
+ */
+const SHARED_MODELS = { AuthRequest, AuthResponse, RegisterRequest, User } as const;
+const isSharedModel = (s: unknown): s is { $id: keyof typeof SHARED_MODELS } =>
+  typeof s === 'object' && s !== null && typeof (s as { $id?: unknown }).$id === 'string' &&
+  (s as { $id: string }).$id in SHARED_MODELS;
+
+const refTo = (s: { $id: string }) => ({ $ref: `#/components/schemas/${s.$id}` });
 
 /** Composition root: the only place that knows every layer. */
 export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
@@ -59,6 +72,28 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       // Name components after the TypeBox $id instead of def-0, def-1, ...
       buildLocalReference: (json, _baseUri, _fragment, i) =>
         typeof json.$id === 'string' ? json.$id : `def-${i}`,
+    },
+    transform: ({ schema, url }) => {
+      if (!schema) return { schema, url };
+      const out: Record<string, unknown> = { ...schema };
+      if (isSharedModel(out.body)) out.body = refTo(out.body);
+      if (out.response && typeof out.response === 'object') {
+        out.response = Object.fromEntries(
+          Object.entries(out.response).map(([code, r]) => [code, isSharedModel(r) ? refTo(r) : r]),
+        );
+      }
+      return { schema: out, url };
+    },
+    transformObject: (document) => {
+      if (!('openapiObject' in document)) return document.swaggerObject;
+      const openapiObject = document.openapiObject;
+      const schemas = (openapiObject.components ??= {}).schemas ??= {};
+      for (const [id, model] of Object.entries(SHARED_MODELS)) {
+        const { $id: _id, ...rest } = JSON.parse(JSON.stringify(model));
+        if (rest.properties?.user) rest.properties.user = { $ref: '#/components/schemas/User' };
+        schemas[id] = rest;
+      }
+      return openapiObject;
     },
     openapi: {
       openapi: '3.0.3',

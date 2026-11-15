@@ -21,7 +21,10 @@ export const getCurrentUser: GetCurrentUser = (request) => {
 /** Public routes, matched on method and route pattern (not the raw URL). */
 const PUBLIC_ROUTES = new Set(['POST /auth/register', 'POST /auth/login']);
 
-/** Swagger UI serves its page, assets and the spec JSON under this prefix. */
+/**
+ * Swagger UI serves its page, assets and the spec JSON under this prefix.
+ * Everything under it is public, so no application route may live under /docs.
+ */
 const DOCS_PREFIX = '/docs';
 
 function isPublic(request: FastifyRequest): boolean {
