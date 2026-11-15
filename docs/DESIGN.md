@@ -4,7 +4,9 @@ Backend for a note-taking service used and shared by several small teams.
 
 ## Scope
 
-**Stage 1 (this pass): single user.** No login and no team membership endpoints. One default user is seeded at startup. Notes can be labeled with one or more teams.
+**Stage 1: single user.** No login and no team membership endpoints. One default user is seeded at startup. Notes can be labeled with one or more teams. Built without automated tests, which come in stage 1b.
+
+**Stage 1b (next): automated tests.** A test suite for everything stage 1 built, plus a CI workflow. No production code changes except what testing requires. See "Testing (stage 1b)". Each later stage extends the suite as it lands.
 
 **Stage 2 (later): multi-user.** Built in two parts. Stage 1 is built so this is a small change (see "Seams for stage 2").
 
@@ -20,13 +22,15 @@ Backend for a note-taking service used and shared by several small teams.
 ## Stack
 
 - Node + TypeScript
-- Fastify, with schemas defined in TypeBox (`@sinclair/typebox`, `@fastify/type-provider-typebox`). Validation uses Fastify's built-in Ajv.
+- Fastify, with schemas defined in TypeBox (`typebox`, `@fastify/type-provider-typebox` 6.x). Validation uses Fastify's built-in Ajv.
 - SQLite via `better-sqlite3` and plain prepared statements. Zero setup: the database is a single file.
 - Optional: `@fastify/swagger` and `@fastify/swagger-ui` for API docs generated from the schemas.
 
 ## Data model
 
 Database is relational. The schema is applied at startup with `CREATE TABLE IF NOT EXISTS`, so a later stage can add its tables without touching existing data. `team_members` is created in stage 1 even though it is used from stage 2.
+
+Timestamps are assigned by the database via column defaults (ISO 8601 UTC, millisecond precision, `Z` suffix), and `notes.updated_at` is refreshed in the repository's UPDATE.
 
 **users**
 - `id` TEXT (UUID) PK
@@ -146,6 +150,32 @@ Inside the same transaction as each `PATCH`, the service copies the note's curre
 
 Anyone who can read the note can read its revisions. Anyone who can edit it can restore. Deleting a note deletes its revisions.
 
+## Testing (stage 1b)
+
+Each layer is tested the way that is cheapest for it. Tests are split into two folders that each mirror `src/`: `test/unit/` and `test/integration/`.
+
+### Unit tests (`test/unit/`)
+| Layer | What is tested | How |
+|---|---|---|
+| Services | Business rules: unknown `team_ids` rejected, owner set from the current user, PATCH replaces `team_ids`, not-found errors, access checks | In-memory fake repositories passed to the constructors. No database and no HTTP. |
+
+### Integration tests (`test/integration/`)
+| Area | What is tested | How |
+|---|---|---|
+| Data | SQL behavior: `q` and `team` filters, pagination and `total`, ordering, LIKE escaping of `%` and `_`, cascade on `note_teams`, timestamp defaults and the `updated_at` bump | Real SQLite on `:memory:`. |
+| API, per route | Status codes, request validation (bad uuid, empty title), the `{error,message}` shape, response shapes, mapping of domain errors | `app.inject()` against the full app. A few broad tests per route, not one per field. |
+| API, scenarios | Flows through the whole stack that per-layer tests miss. For example: create two teams, create a note in both, filter by each team, PATCH `team_ids` to one and confirm the filters change; search for text containing `%` and `_`; page through 25 notes with `limit` and `offset` and confirm `total` and ordering | `app.inject()`, several requests per test. |
+| Persistence | Data survives a restart | A file-backed database in a temp directory: write a note, close the app, open a new app on the same file, read the note back. |
+| OpenAPI | The spec generates, every route has response schemas, and each shared model appears once under `components/schemas` | One test on `app.swagger()`. |
+
+Each integration test builds a fresh app with its own `:memory:` database through a `buildTestApp()` helper, so tests do not depend on order and can run in parallel. There are no socket-level end-to-end tests: they would repeat the `inject()` tests, and the persistence test covers the one thing they would add.
+
+### Tooling
+- Vitest, with npm scripts `test:unit`, `test:integration` and `test` (runs both).
+- A coverage report is produced, with no minimum enforced.
+- A GitHub Actions workflow runs typecheck, build and `test` on pull requests, in one job.
+- Later stages extend the suite. Stage 2b's access rules are covered by service unit tests with fake repositories, plus integration scenarios with two users.
+
 ## Seams for stage 2
 
 1. **Current user.** Routes get the user from `getCurrentUser(request)`. Stage 1 returns the seeded default user. Stage 2a changes this one function to read the bearer token and reject missing or invalid ones with 401. The JWT uses `JWT_SECRET` (a dev default with a logged warning) and has an expiry.
@@ -169,7 +199,7 @@ Team rules in 2b: anyone logged in can create a team and becomes its first membe
 - Search is a simple case-insensitive `LIKE` over title and body. No full-text index.
 - No tags. Teams serve as the grouping mechanism.
 - SQLite is single-writer, which is acceptable for this scope.
-- Tests, when added, use `app.inject()` against an in-memory SQLite database.
+- Tests arrive in stage 1b, not stage 1.
 
 ## Open questions
 
@@ -177,5 +207,6 @@ Team rules in 2b: anyone logged in can create a team and becomes its first membe
 
 ## Resolved decisions
 
+- Stage 1b testing: Vitest, with `test/unit/` and `test/integration/` folders that each mirror `src/`. Both per-route and scenario integration tests are included. A coverage report with no enforced threshold, and one GitHub Actions job running typecheck, build, unit and integration tests on pull requests.
 - Data persists across restarts. SQLite is file-backed by default (path set by a `DB_PATH` environment variable, with a default such as `./data/notes.db`). `DB_PATH=:memory:` switches to an in-memory database, which tests use.
 - Stage 4 team deletion cascades: `DELETE /teams/{id}` removes the team from every note's `team_ids`. A note left with no teams becomes private to its owner. Blocking with 409 was rejected because, with no admin role, a blocked team could become undeletable.
